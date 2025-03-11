@@ -42,8 +42,8 @@ jobs:
         with:
           python-version-file: ".python-version"
 
-      - name: Install the project
-        run: uv sync --all-extras --all-groups
+      - name: Install docs-related packages
+        run: uv sync --group docs
 
       - name: Build docs
         run: |
