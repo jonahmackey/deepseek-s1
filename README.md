@@ -32,19 +32,19 @@ Note that depending on the model size, it might take some time to see the "a-ha"
 
 ## FAQs
 
-> Why is there's no package to install, and no 10GB+ Torch virtual environment to create?
+**Why is there's no package to install, and no 10GB+ Torch virtual environment to create?**
 
-We very much understand that you might be conscious about your disk quota, and would prefer not to create another 10GB+ virtual environment just to experiment with GRPO. Thus, we have bundled a number of dependencies (torch, vllm, unsloth, trl, transformer, datasets, wandb, etc.) into one pre-built Singularity Image (SIF) stored at a shared location on the cluster, so you can get started without taking up any space on your home directory.
+We very much understand that you might be conscious of your disk quota, and would prefer not to create another 10GB+ virtual environment just to experiment with GRPO. Thus, we have bundled a number of dependencies (torch, vllm, unsloth, trl, transformer, datasets, wandb, etc.) into one pre-built Singularity Image (SIF) stored at a shared location on the cluster, so you can get started without taking up any space on your home directory.
 
 See docs/source/building_sif.md to learn about how we built this image. However, if you are just trying to install another package, there's no need to build a new image! Read on:
 
-> That's nice, but what if I need to install additional packages on top of the provided environment?
+**That's nice, but what if I need to install additional packages on top of the provided environment?**
 
 Short answer: just add them to pyproject.toml under "dependencies".
 
 Long answer: We have bundled the SIF image with astral-uv. On the first run, the SLURM script that we provide will create a venv just for you under `.venv`. This venv is almost empty (~27KB) by default, and is overlaid on top of the 10GB of packages provided through the SIF image (vllm, etc.) When you add your custom dependencies to pyproject.toml under "dependencies", these dependencies are installed at the first run, and will be become available alongside existing packages provided through the SIF image.
 
-> What packages are available in the SIF file?
+**What packages are available in the SIF file?**
 
 Quite a few. Run the following to see the full list of packages that are available.
 
