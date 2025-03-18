@@ -7,9 +7,11 @@ https://docs.unsloth.ai/basics/reasoning-grpo-and-rl
 
 import re
 
+# Must import unsloth before trl.
+from unsloth import FastLanguageModel, PatchFastRL, is_bfloat16_supported
+
 from datasets import Dataset, load_dataset
 from trl import GRPOConfig, GRPOTrainer
-from unsloth import FastLanguageModel, PatchFastRL, is_bfloat16_supported
 from vllm import SamplingParams
 
 

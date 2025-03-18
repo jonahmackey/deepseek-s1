@@ -1,4 +1,4 @@
-#/bin/bash
+#!/bin/bash
 #SBATCH -p a40
 #SBATCH --gres gpu:1
 #SBATCH -c 8
@@ -26,4 +26,4 @@ singularity exec \
 --bind /scratch/ssd004/scratch/`whoami`:/scratch \
 --bind /opt/slurm/:/opt/slurm/ \
 ${SIF_PATH} \
-python3 examples/grpo/unsloth_grpo.py
+uv run examples/grpo/unsloth_vllm_lora_grpo.py

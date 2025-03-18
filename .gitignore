@@ -17,3 +17,5 @@ wheels/
 # Vscode
 .vscode
 uv.lock
+
+/unsloth_compiled_cache
