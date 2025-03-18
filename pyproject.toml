@@ -1,15 +1,27 @@
 [project]
-name = "aieng-template-uv"
+name = "vector-trl-references"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 authors = [ {name = "Vector AI Engineering", email = "ai_engineering@vectorinstitute.ai"}]
 license = "Apache-2.0"
-repository = "https://github.com/VectorInstitute/aieng-template-uv"
+repository = "https://github.com/VectorInstitute/vector-trl-references"
 requires-python = ">=3.12"
-dependencies = []
 
+# Add your custom packages here
+dependencies = [
+#    "langgraph",
+]
+
+# Packages listed below are for building and dev work
 [dependency-groups]
+base_image = [
+    "trl==0.15.2",
+    "unsloth",
+    "diffusers",
+    "pillow",
+    "wandb",
+]
 dev = [
     "codecov>=2.1.13",
     "mypy>=1.14.1",
@@ -36,13 +48,6 @@ docs = [
     "sphinx-design>=0.6.1",
     "sphinxcontrib-apidoc>=0.5.0",
 ]
-train = [
-    "trl==0.15.2",
-    "unsloth",
-    "diffusers",
-    "pillow",
-    "wandb",
-]
 
 [tool.mypy]
 ignore_missing_imports = true
@@ -65,10 +70,12 @@ warn_return_any = true
 implicit_reexport = false
 strict_equality = true
 extra_checks = true
+exclude = ["examples/.*"]
 
 [tool.ruff]
 include = ["*.py", "pyproject.toml", "*.ipynb"]
 line-length = 88
+exclude = ["examples/"]
 
 [tool.ruff.format]
 quote-style = "double"

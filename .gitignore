@@ -16,3 +16,4 @@ wheels/
 
 # Vscode
 .vscode
+uv.lock

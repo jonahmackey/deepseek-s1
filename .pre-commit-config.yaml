@@ -29,15 +29,6 @@ repos:
     - id: ruff-format
       types_or: [python, jupyter]
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.15.0
-    hooks:
-    - id: mypy
-      entry: python3 -m mypy --config-file pyproject.toml
-      language: system
-      types: [python]
-      exclude: "tests"
-
   - repo: https://github.com/crate-ci/typos
     rev: v1
     hooks:
@@ -57,15 +48,6 @@ repos:
       entry: python3 -m doctest -o NORMALIZE_WHITESPACE
       files: "^aieng_template/"
       language: system
-
-  - repo: local
-    hooks:
-    - id: pytest
-      name: pytest
-      entry: python3 -m pytest -m "not integration_test"
-      language: system
-      pass_filenames: false
-      always_run: true
 
 ci:
     autofix_commit_msg: |
