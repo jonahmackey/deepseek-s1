@@ -7,7 +7,7 @@ This repository contains various examples of how to fine-tune LLMs using RL on t
 Why this combination?
 
 - vLLM: Efficient Rollout.
-- Unsloth: patches vLLM and TRL, so that vLLM would reuse the model weights from TRL- no need a separate copy in memory.
+- Unsloth: patches vLLM and TRL, so that vLLM would reuse the model weights from TRL- no need for a separate copy in memory.
 - TRL: implements various online RL algorithms, including GRPO.
 
 How to run this example?
