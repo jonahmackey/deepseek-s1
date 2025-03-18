@@ -19,3 +19,5 @@ wheels/
 uv.lock
 
 /unsloth_compiled_cache
+/wandb
+/grpo_trainer_lora_model

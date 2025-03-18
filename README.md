@@ -19,6 +19,15 @@ cd vector-trl-references/
 sbatch examples/grpo/unsloth_vllm_lora_grpo.slurm.sh
 ```
 
+After the job is allocated resources, run the following to print the logs.
+
+```bash
+export SLURM_JOB_ID=...
+tail -f \
+logs/grpo_${SLURM_JOB_ID}.out \
+logs/grpo_${SLURM_JOB_ID}.err
+```
+
 Note that depending on the model size, it might take some time to see the "a-ha" moment of self-correction, and you might need to modify the hyperparameters listed in unsloth_vllm_lora_grpo.py where appropriate. We are trying to figure out a way to make the behavior more consistent, and we welcome your input on how to make that happen.
 
 ## FAQs
