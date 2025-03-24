@@ -1,6 +1,6 @@
 # Vector TRL Examples
 
-This repository contains various examples of how to fine-tune LLMs using RL on the Vector Cluster.
+This repository currently a reference implementstion of GPRO for use on the Vector Cluster. We will explore extending it to other examples of other LLM RL algorithms in the future.
 
 ## Quickstart
 
@@ -27,13 +27,13 @@ That's it! The job will use our pre-built Singularity image with all dependencie
 
 ## Implementation details
 
-This project combines several key technologies to enable efficient RL fine-tuning:
+This project combines several important dependencies to enable efficient RL fine-tuning:
 
 - **vLLM**: A high-throughput, memory-efficient inference engine for LLMs that provides efficient rollout capabilities. It uses PagedAttention for optimized memory management.
 
 - **Unsloth with LoRA**: Unsloth lowers the compute requriements by patching vLLM and TRL to work together efficiently. It also implements parameter-efficient fine-tuning using LoRA (Low-Rank Adaptation).
 
-- **TRL (Transformer Reinforcement Learning)**: A library that implements various online RL algorithms for LLMs, including GRPO (Generative Reinforcement Policy Optimization), PPO, and others.
+- **TRL (Transformer Reinforcement Learning)**: A library that implements various online RL algorithms for LLMs, including GRPO (Group Relative Policy Optimization), PPO, and others
 
 - **Singularity**: A containerization solution for HPC environments that allows us to package all dependencies in a single image file (SIF).
 
