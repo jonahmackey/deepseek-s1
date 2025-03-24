@@ -21,3 +21,6 @@ uv.lock
 /unsloth_compiled_cache
 /wandb
 /grpo_trainer_lora_model
+/unsloth
+/outputs
+/grpo_saved_lora
