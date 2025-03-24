@@ -2,39 +2,57 @@
 
 This repository contains various examples of how to fine-tune LLMs using RL on the Vector Cluster.
 
-## GRPO (uv, vLLM, Unsloth-TRL, singularity)
+## Quickstart
 
-Why this combination?
+To quickly get started with GRPO fine-tuning on the Vector Cluster:
 
-- vLLM: Efficient Rollout.
-- Unsloth: patches vLLM and TRL, so that vLLM would reuse the model weights from TRL- no need for a separate copy in memory.
-- TRL: implements various online RL algorithms, including GRPO.
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/vectorInstitute/vector-trl-references.git
+   cd vector-trl-references/
+   ```
 
-How to run this example?
+2. Submit the GRPO job:
+   ```bash
+   sbatch examples/grpo/unsloth_vllm_lora_grpo.slurm.sh
+   ```
 
-```bash
-# Vaughan cluster
-git clone https://github.com/vectorInstitute/vector-trl-references.git
-cd vector-trl-references/
-sbatch examples/grpo/unsloth_vllm_lora_grpo.slurm.sh
-```
+3. Monitor the logs:
+   ```bash
+   export SLURM_JOB_ID=<your_job_id>
+   tail -f logs/grpo_${SLURM_JOB_ID}.out logs/grpo_${SLURM_JOB_ID}.err
+   ```
 
-After the job is allocated resources, run the following to print the logs.
+That's it! The job will use our pre-built Singularity image with all dependencies included.
 
-```bash
-export SLURM_JOB_ID=...
-tail -f \
-logs/grpo_${SLURM_JOB_ID}.out \
-logs/grpo_${SLURM_JOB_ID}.err
-```
+## Implementation details
 
-Note that depending on the model size, it might take some time to see the "a-ha" moment of self-correction, and you might need to modify the hyperparameters listed in unsloth_vllm_lora_grpo.py where appropriate. We are trying to figure out a way to make the behavior more consistent, and we welcome your input on how to make that happen.
+This project combines several key technologies to enable efficient RL fine-tuning:
+
+- **vLLM**: A high-throughput, memory-efficient inference engine for LLMs that provides efficient rollout capabilities. It uses PagedAttention for optimized memory management.
+
+- **Unsloth with LoRA**: Unsloth lowers the compute requriements by patching vLLM and TRL to work together efficiently. It also implements parameter-efficient fine-tuning using LoRA (Low-Rank Adaptation).
+
+- **TRL (Transformer Reinforcement Learning)**: A library that implements various online RL algorithms for LLMs, including GRPO (Generative Reinforcement Policy Optimization), PPO, and others.
+
+- **Singularity**: A containerization solution for HPC environments that allows us to package all dependencies in a single image file (SIF).
+
+## Minimum Resources
+
+By default, the quickstart example runs on the following resources:
+- 1 NVIDIA A40 GPU
+- 8 CPU cores
+- 32GB RAM
+- 5 hours of runtime
+
+You can modify these resource allocations by editing the SLURM parameters in `examples/grpo/unsloth_vllm_lora_grpo.slurm.sh` if needed. This implementation is intended to serve as a starting point for experimentation - full scale training is better suited for the A100 partition.
+
 
 ## FAQs
 
 **Why is there's no package to install, and no 10GB+ Torch virtual environment to create?**
 
-We very much understand that you might be conscious of your disk quota, and would prefer not to create another 10GB+ virtual environment just to experiment with GRPO. Thus, we have bundled a number of dependencies (torch, vllm, unsloth, trl, transformer, datasets, wandb, etc.) into one pre-built Singularity Image (SIF) stored at a shared location on the cluster, so you can get started without taking up any space on your home directory.
+In order to save your disk quota, and avoid creating another 10GB+ virtual environment just to experiment with GRPO. We have bundled a number of dependencies (torch, vllm, unsloth, trl, transformer, datasets, wandb, etc.) into one pre-built Singularity Image (SIF) stored at a shared location on the cluster, so you can get started without taking up any space on your home directory.
 
 See docs/source/building_sif.md to learn about how we built this image. However, if you are just trying to install another package, there's no need to build a new image! Read on:
 
@@ -42,7 +60,7 @@ See docs/source/building_sif.md to learn about how we built this image. However,
 
 Short answer: just add them to pyproject.toml under "dependencies".
 
-Long answer: We have bundled the SIF image with astral-uv. On the first run, the SLURM script that we provide will create a venv just for you under `.venv`. This venv is almost empty (~27KB) by default, and is overlaid on top of the 10GB of packages provided through the SIF image (vllm, etc.) When you add your custom dependencies to pyproject.toml under "dependencies", these dependencies are installed at the first run, and will be become available alongside existing packages provided through the SIF image.
+Long answer: We have bundled the SIF image with uv. On the first run, the SLURM script that we provide will create a venv just for you under `.venv`. This venv is almost empty (~27KB) by default, and is overlaid on top of the 10GB of packages provided through the SIF image (vllm, etc.) When you add your custom dependencies to pyproject.toml under "dependencies", these dependencies are installed at the first run, and will be become available alongside existing packages provided through the SIF image.
 
 **What packages are available in the SIF file?**
 
