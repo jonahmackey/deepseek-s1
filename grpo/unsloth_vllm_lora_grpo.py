@@ -24,6 +24,7 @@ from unsloth import FastLanguageModel, PatchFastRL, is_bfloat16_supported
 from datasets import Dataset, load_dataset
 from trl import GRPOConfig, GRPOTrainer
 from vllm import SamplingParams
+import torch
 
 
 PatchFastRL("GRPO", FastLanguageModel)
@@ -71,18 +72,18 @@ model = FastLanguageModel.get_peft_model(
 # Load and prep dataset
 SYSTEM_PROMPT = """
 Respond in the following format:
-<reasoning>
+<think>
 ...
-</reasoning>
+</think>
 <answer>
 ...
 </answer>
 """
 
 XML_COT_FORMAT = """\
-<reasoning>
-{reasoning}
-</reasoning>
+<think>
+{think}
+</think>
 <answer>
 {answer}
 </answer>
@@ -102,8 +103,12 @@ def extract_hash_answer(text: str) -> str | None:
 
 
 # uncomment middle messages for 1-shot prompting
-def get_gsm8k_questions(split="train") -> Dataset:
+def get_gsm8k_questions(split="train", num_examples: int = None) -> Dataset:
     data = load_dataset("openai/gsm8k", "main")[split]  # type: ignore
+    
+    if num_examples is not None:
+        data = data.select(range(min(num_examples, len(data))))
+        
     data = data.map(
         lambda x: {  # type: ignore
             "prompt": [
@@ -114,7 +119,6 @@ def get_gsm8k_questions(split="train") -> Dataset:
         }
     )  # type: ignore
     return data  # type: ignore
-
 
 dataset = get_gsm8k_questions()
 
@@ -142,7 +146,7 @@ def int_reward_func(completions, **kwargs) -> list[float]:
 
 def strict_format_reward_func(completions, **kwargs) -> list[float]:
     """Reward function that checks if the completion has a specific format."""
-    pattern = r"^<reasoning>\n.*?\n</reasoning>\n<answer>\n.*?\n</answer>\n$"
+    pattern = r"^<think>\n.*?\n</think>\n<answer>\n.*?\n</answer>\n$"
     responses = [completion[0]["content"] for completion in completions]
     matches = [re.match(pattern, r) for r in responses]
     return [0.5 if match else 0.0 for match in matches]
@@ -150,7 +154,7 @@ def strict_format_reward_func(completions, **kwargs) -> list[float]:
 
 def soft_format_reward_func(completions, **kwargs) -> list[float]:
     """Reward function that checks if the completion has a specific format."""
-    pattern = r"<reasoning>.*?</reasoning>\s*<answer>.*?</answer>"
+    pattern = r"<think>.*?</think>\s*<answer>.*?</answer>"
     responses = [completion[0]["content"] for completion in completions]
     matches = [re.match(pattern, r) for r in responses]
     return [0.5 if match else 0.0 for match in matches]
@@ -158,9 +162,9 @@ def soft_format_reward_func(completions, **kwargs) -> list[float]:
 
 def count_xml(text) -> float:
     count = 0.0
-    if text.count("<reasoning>\n") == 1:
+    if text.count("<think>\n") == 1:
         count += 0.125
-    if text.count("\n</reasoning>\n") == 1:
+    if text.count("\n</think>\n") == 1:
         count += 0.125
     if text.count("\n<answer>\n") == 1:
         count += 0.125
@@ -175,12 +179,22 @@ def xmlcount_reward_func(completions, **kwargs) -> list[float]:
     contents = [completion[0]["content"] for completion in completions]
     return [count_xml(c) for c in contents]
 
-
 # ### Train the model
-#
+
+# Patch for budget forcing
+def vLLMSamplingParams(**kwargs):
+    attach_kwargs = {k: v for k, v in kwargs.items() if k != "max_tokens"}
+    sampling_params = SamplingParams(**kwargs)
+    sampling_params._set_kwargs = attach_kwargs
+    return sampling_params
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+# logits_processor = WaitLogitsProcessor(tokenizer, device, next_token_id=14190, min_num_tokens=512)
+
+# vllm_sampling_params=vLLMSamplingParams(max_tokens=4096, logits_processors=[logits_processor])
+vllm_sampling_params = None 
+
 # Now set up GRPO Trainer and all configurations!
-
-
 training_args = GRPOConfig(
     use_vllm=True,  # use vLLM for fast inference!
     learning_rate=5e-6,
@@ -193,7 +207,7 @@ training_args = GRPOConfig(
     logging_steps=1,
     bf16=is_bfloat16_supported(),
     fp16=not is_bfloat16_supported(),
-    per_device_train_batch_size=1,
+    per_device_train_batch_size=8,
     gradient_accumulation_steps=1,  # Increase to 4 for smoother training
     num_generations=8,  # Decrease if out of memory
     max_prompt_length=256,
@@ -204,6 +218,7 @@ training_args = GRPOConfig(
     max_grad_norm=0.1,
     report_to="wandb",  # Can use Weights & Biases
     output_dir="outputs",
+    vllm_sampling_params=vllm_sampling_params,
 )
 
 # And let's run the trainer! If you scroll up, you'll see a table of rewards.

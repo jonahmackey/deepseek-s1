@@ -16,8 +16,8 @@ SIF_PATH=/projects/llm/unsloth-vllm-trl-latest.sif
 # This .venv is empty (~27KB) by default.
 # To install new packages, modify pyproject.toml. See README.md FAQ for more details.
 singularity exec \
-${SIF_PATH} \
-uv venv --system-site-packages .venv
+    ${SIF_PATH} \
+    uv venv --system-site-packages .venv
 
 singularity exec \
 --nv \
@@ -26,4 +26,15 @@ singularity exec \
 --bind /scratch/ssd004/scratch/`whoami`:/scratch \
 --bind /opt/slurm/:/opt/slurm/ \
 ${SIF_PATH} \
-uv run examples/grpo/unsloth_vllm_lora_grpo.py
+uv run grpo/train.py \
+    --model_name /model-weights/Qwen2.5-3B-Instruct \
+    --lora_rank 64 \
+    --num_examples -1 \
+    --per_device_train_batch_size 8 \
+    --gradient_accumulation_steps 1 \
+    --max_completion_length 1024 \
+    --min_completion_length 0 \
+    --num_generations 8 \
+    --num_steps 250 \
+    # --do_budget_forcing \
+    # --min_budget 256 \
