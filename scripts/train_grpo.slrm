@@ -36,4 +36,4 @@ uv run grpo/train.py \
     --num_generations 8 \
     --num_steps 250 \
     --do_budget_forcing \
-    --min_budget 768 \
+    --min_budget 256 \

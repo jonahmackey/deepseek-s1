@@ -18,7 +18,8 @@ from vllm import SamplingParams
 from grpo.data import get_gsm8k_questions
 from grpo.budget_forcing import WaitLogitsProcessor
 from grpo.reward import correctness_reward_func, int_reward_func, xmlcount_reward_func, soft_format_reward_func, strict_format_reward_func
-from grpo.eval import evaluate_built_model, evaluate_checkpoint
+# from grpo.eval import evaluate_built_model, evaluate_checkpoint
+from grpo.eval_batched import evaluate_built_model
 from pathlib import Path
 
 PatchFastRL("GRPO", FastLanguageModel)
@@ -77,6 +78,8 @@ def run(args):
     run_name = f"n={args.num_generations}-b={args.per_device_train_batch_size}-g={args.gradient_accumulation_steps}-max={args.max_completion_length}"
     if args.do_budget_forcing:
         run_name += f"-bf={args.min_budget}"
+    if args.num_examples != -1:
+        run_name += f"-n_data_pts={args.num_examples}"
     
     training_args = GRPOConfig(
         use_vllm=True,  # use vLLM for fast inference!
@@ -125,7 +128,7 @@ def run(args):
     test_dataset = get_gsm8k_questions(split="test")
     eval_sampling_params = SamplingParams(temperature=0.8, top_p=0.95, max_tokens=1024)
     
-    evaluate_built_model(model, tokenizer, loaded_lora, test_dataset, eval_sampling_params)
+    evaluate_built_model(model, tokenizer, loaded_lora, test_dataset, eval_sampling_params, batch_size=128)
         
 
 if __name__ == "__main__":
