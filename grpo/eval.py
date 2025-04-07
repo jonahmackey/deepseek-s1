@@ -1,5 +1,5 @@
 from unsloth import FastLanguageModel, PatchFastRL
-from data import get_gsm8k_questions, extract_xml_answer
+from grpo.data import get_gsm8k_questions, extract_xml_answer
 from vllm import SamplingParams
 
 
