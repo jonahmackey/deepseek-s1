@@ -35,5 +35,11 @@ uv run grpo/train.py \
     --max_completion_length 4096 \
     --num_generations 8 \
     --num_steps 250 \
+<<<<<<< HEAD
     --do_budget_forcing \
     --min_budget 256 \
+=======
+    # --format_reward \
+    # --do_budget_forcing \
+    # --min_budget 256 \
+>>>>>>> 564d68d72459b7291dfc73431c3c2917b5351722
