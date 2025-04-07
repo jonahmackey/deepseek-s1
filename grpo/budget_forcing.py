@@ -29,13 +29,12 @@ class WaitLogitsProcessor:
     Args:
         tokenizer: PreTrainedTokenizerBase
     """
-    def __init__(self, tokenizer: PreTrainedTokenizerBase, next_token_id: int, min_budget: int):
+    def __init__(self, tokenizer: PreTrainedTokenizerBase, device: torch.device, next_token_id: int, min_num_tokens: int, boost_logit: float = 1e9, low_logit: float = -1e9):
         self.tokenizer = tokenizer
-        self.device = device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = device
         
-        # think_token_id = 26865 # this is the "think" token for Qwen2.5-1.5B-Instruct
-        think_token_id = torch.Tensor(tokenizer("think").input_ids).long().to(self.device)
-        assert len(think_token_id) == 1, f"Expected 1 token id for 'think', got {len(think_token_id)}"
+        think_token_id = 26865 # this is the "think" token for Qwen2.5-1.5B-Instruct
+        # think_token_id = torch.Tensor(tokenizer("think").input_ids).long().to(self.device)
         
         vocab = tokenizer.get_vocab()        
         left_matching_token_ids = [token_id for token, token_id in vocab.items() if token.endswith("</")]
@@ -45,7 +44,9 @@ class WaitLogitsProcessor:
         # self.think_token_combo has shape (M, 3)
         
         self.next_token_id = next_token_id
-        self.min_budget = min_budget
+        self.min_num_tokens = min_num_tokens
+        self.boost_logit = boost_logit
+        self.low_logit = low_logit
         
     def __call__(self, *args):
         """
@@ -60,10 +61,11 @@ class WaitLogitsProcessor:
         else:
             raise ValueError("Expected 2 or 3 arguments, got %d" % len(args))
         
+        # print("====== Matching ======")
 
         # Check if the the last three tokens in past_tokens match with "</think>".
         # Assuming past_tokens is a list or tensor of token ids.
-        if len(past_tokens) > 3 and len(past_tokens) < self.min_budget:
+        if len(past_tokens) > 3 and len(past_tokens) < self.min_num_tokens:
             if isinstance(past_tokens, torch.Tensor):
                 # If it's a tensor, get the last three elements.
                 last_three_tokens = past_tokens[-3:]
@@ -75,13 +77,14 @@ class WaitLogitsProcessor:
             # Then compare with self.think_token_combo (which has shape (M, 3))
             # The result would be (M, 3)
             matches = (last_three_tokens.unsqueeze(0) == self.think_token_combo)  # shape (M, 3)
-            
-            # For a complete match, all three elements must match
+            # 3. For a complete match, all three elements must match
             pattern_match = matches.all(dim=-1)  # shape (M,)
 
             if pattern_match.any(dim=0).item():
                 print("================ MATCHED ================")
                 print(last_three_tokens)
-                logits[self.next_token_id] = float("inf")
+                logits = logits.clone()  # avoid in-place modification if needed
+                logits.fill_(self.low_logit)
+                logits[self.next_token_id] = self.boost_logit
 
         return logits

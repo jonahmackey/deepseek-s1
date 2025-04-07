@@ -19,6 +19,8 @@ from grpo.data import get_gsm8k_questions
 from grpo.budget_forcing import WaitLogitsProcessor
 from grpo.reward import (correctness_reward_func, int_reward_func, bf_soft_format_reward_func, 
                          bf_strict_format_reward_func, bf_xmlcount_reward_func)
+from grpo.eval import evaluate_built_model, evaluate_checkpoint
+from pathlib import Path
 
 PatchFastRL("GRPO", FastLanguageModel)
 
@@ -60,11 +62,12 @@ def run(args):
     
     # Data prep
     train_dataset = get_gsm8k_questions(split="train", num_examples=args.num_examples)
-    
+    import torch
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     # Setup budget forcing  
     if args.do_budget_forcing:
         # TODO generalized next token id
-        logits_processors = [WaitLogitsProcessor(tokenizer, next_token_id=14190, min_budget=args.min_budget)]
+        logits_processors = [WaitLogitsProcessor(tokenizer, device=DEVICE, next_token_id=14190, min_num_tokens=args.min_budget)]
     else:
         logits_processors = None
         
@@ -119,6 +122,15 @@ def run(args):
             train_dataset=train_dataset,
         )
     trainer.train()
+    
+    checkpoint_save_path = Path(f"checkpoints/{run_name}")
+    checkpoint_save_path.mkdir(parents=True, exist_ok=True)
+    model.save_lora(checkpoint_save_path)
+    loaded_lora = model.load_lora(checkpoint_save_path)
+    test_dataset = get_gsm8k_questions(split="test")
+    eval_sampling_params = SamplingParams(temperature=0.8, top_p=0.95, max_tokens=1024)
+    
+    evaluate_built_model(model, tokenizer, loaded_lora, test_dataset, eval_sampling_params)
         
 
 if __name__ == "__main__":
