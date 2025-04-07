@@ -17,7 +17,8 @@ from vllm import SamplingParams
 
 from grpo.data import get_gsm8k_questions
 from grpo.budget_forcing import WaitLogitsProcessor
-from grpo.reward import correctness_reward_func, int_reward_func, xmlcount_reward_func, soft_format_reward_func, strict_format_reward_func
+from grpo.reward import (correctness_reward_func, int_reward_func, bf_soft_format_reward_func, 
+                         bf_strict_format_reward_func, bf_xmlcount_reward_func)
 
 PatchFastRL("GRPO", FastLanguageModel)
 
@@ -72,6 +73,10 @@ def run(args):
         
     # GRPO Trainer
     run_name = f"n={args.num_generations}-b={args.per_device_train_batch_size}-g={args.gradient_accumulation_steps}-max={args.max_completion_length}"
+    if args.format_reward:
+        run_name += "-format"
+    else:
+        run_name += "-no_format"
     if args.do_budget_forcing:
         run_name += f"-bf={args.min_budget}"
     
@@ -103,8 +108,8 @@ def run(args):
     )
     
     reward_funcs = [int_reward_func, correctness_reward_func]
-    # if not args.do_budget_forcing:
-    #     reward_funcs += [xmlcount_reward_func, soft_format_reward_func, strict_format_reward_func]
+    if args.format_reward:
+        reward_funcs += [bf_soft_format_reward_func, bf_strict_format_reward_func, bf_xmlcount_reward_func]
     
     trainer = GRPOTrainer(
         model=model,
@@ -128,6 +133,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_completion_length", type=int, default=1024)
     parser.add_argument("--num_generations", type=int, default=8)
     parser.add_argument("--num_steps", type=int, default=250)
+    parser.add_argument("--format_reward", action="store_true")
     parser.add_argument("--do_budget_forcing", action="store_true")
     parser.add_argument("--min_budget", type=int, default=256)
     args = parser.parse_args()
