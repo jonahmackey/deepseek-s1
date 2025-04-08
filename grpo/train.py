@@ -15,10 +15,9 @@ from unsloth import FastLanguageModel, PatchFastRL, is_bfloat16_supported
 from trl import GRPOConfig, GRPOTrainer
 from vllm import SamplingParams
 
-from grpo.data import get_gsm8k_questions
+from grpo.data import get_dataset
 from grpo.budget_forcing import WaitLogitsProcessor
-from grpo.reward import (correctness_reward_func, int_reward_func, bf_soft_format_reward_func, 
-                         bf_strict_format_reward_func, bf_xmlcount_reward_func)
+from grpo.reward import get_reward_funcs, get_format_reward_funcs
 from grpo.eval import evaluate_built_model, evaluate_checkpoint
 from pathlib import Path
 
@@ -33,6 +32,8 @@ def vLLMSamplingParams(**kwargs):
 
 
 def run(args):
+    print("Arguments:\n", vars(args))
+    
     # Load up `Qwen 2.5 3B Instruct`, and set parameters
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=args.model_name,
@@ -61,11 +62,12 @@ def run(args):
     )
     
     # Data prep
-    train_dataset = get_gsm8k_questions(split="train", num_examples=args.num_examples)
+    # train_dataset = get_gsm8k_questions(split="train", num_examples=args.num_examples)
+    train_dataset = get_dataset(task=args.task, split="train")
     import torch
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     # Setup budget forcing  
-    if args.do_budget_forcing:
+    if args.min_budget > 0:
         # TODO generalized next token id
         logits_processors = [WaitLogitsProcessor(tokenizer, device=DEVICE, next_token_id=14190, min_num_tokens=args.min_budget)]
     else:
@@ -75,13 +77,10 @@ def run(args):
                                               logits_processors=logits_processors)
         
     # GRPO Trainer
-    run_name = f"n={args.num_generations}-b={args.per_device_train_batch_size}-g={args.gradient_accumulation_steps}-max={args.max_completion_length}"
+    model_name = args.model_name.split("/")[-1]
+    run_name = f"{model_name}-{args.task}-n={args.num_generations}-b={args.per_device_train_batch_size}-g={args.gradient_accumulation_steps}-max={args.max_completion_length}-bf={args.min_budget}"
     if args.format_reward:
         run_name += "-format"
-    else:
-        run_name += "-no_format"
-    if args.do_budget_forcing:
-        run_name += f"-bf={args.min_budget}"
     
     training_args = GRPOConfig(
         use_vllm=True,  # use vLLM for fast inference!
@@ -105,14 +104,14 @@ def run(args):
         save_steps=args.num_steps,
         max_grad_norm=0.1,
         report_to="wandb",  # Can use Weights & Biases
-        output_dir="outputs",
+        output_dir=f"outputs/{run_name}",
         run_name=run_name,
         vllm_sampling_params=vllm_sampling_params,
     )
     
-    reward_funcs = [int_reward_func, correctness_reward_func]
+    reward_funcs = get_reward_funcs(args.task)
     if args.format_reward:
-        reward_funcs += [bf_soft_format_reward_func, bf_strict_format_reward_func, bf_xmlcount_reward_func]
+        reward_funcs += get_format_reward_funcs()
     
     trainer = GRPOTrainer(
         model=model,
@@ -127,7 +126,7 @@ def run(args):
     checkpoint_save_path.mkdir(parents=True, exist_ok=True)
     model.save_lora(checkpoint_save_path)
     loaded_lora = model.load_lora(checkpoint_save_path)
-    test_dataset = get_gsm8k_questions(split="test")
+    test_dataset = get_dataset(task=args.task, split="test")
     eval_sampling_params = SamplingParams(temperature=0.8, top_p=0.95, max_tokens=1024)
     
     evaluate_built_model(model, tokenizer, loaded_lora, test_dataset, eval_sampling_params)
@@ -138,6 +137,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Run GRPO training.")
     parser.add_argument("--model_name", type=str, default="/model-weights/Qwen2.5-3B-Instruct")
+    parser.add_argument("--task", type=str, default="gsm8k")
     parser.add_argument("--lora_rank", type=int, default=64)
     parser.add_argument("--num_examples", type=int, default=-1)
     parser.add_argument("--per_device_train_batch_size", type=int, default=8)
@@ -146,8 +146,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_generations", type=int, default=8)
     parser.add_argument("--num_steps", type=int, default=250)
     parser.add_argument("--format_reward", action="store_true")
-    parser.add_argument("--do_budget_forcing", action="store_true")
-    parser.add_argument("--min_budget", type=int, default=256)
+    parser.add_argument("--min_budget", type=int, default=-1)
     args = parser.parse_args()
     
     run(args)

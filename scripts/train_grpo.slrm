@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH -p a40
+#SBATCH --qos m
 #SBATCH --gres gpu:1
 #SBATCH -c 8
 #SBATCH --mem 32GB
@@ -35,6 +36,5 @@ uv run grpo/train.py \
     --max_completion_length 4096 \
     --num_generations 8 \
     --num_steps 250 \
+    --min_budget -1 \
     # --format_reward \
-    # --do_budget_forcing \
-    # --min_budget 256 \
