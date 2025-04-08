@@ -193,12 +193,12 @@ def evaluate_built_model(
 # For evaluate_checkpoint:
 # test_dataset = get_gsm8k_questions(split="test", num_examples=1024)
 # sampling_params = SamplingParams(temperature=0.8, top_p=0.95, max_tokens=1024)
-# avg_score, acc = evaluate_checkpoint("/h/yuchongz/vector-trl-references/grpo_saved_lora", test_dataset=test_dataset, sampling_params=sampling_params)
+# avg_score, acc = evaluate_checkpoint("/h/yuchongz/deepseek-s1/checkpoints/n=8-b=8-g=1-max=4096", test_dataset=test_dataset, sampling_params=sampling_params)
 
 
 # For evaluate_built_model
 # model, tokenizer = FastLanguageModel.from_pretrained(
-#     model_name="/model-weights/Qwen2.5-3B-Instruct",
+#     model_name="/h/yuchongz/deepseek-s1/checkpoints/n=8-b=8-g=1-max=4096",
 #     max_seq_length=4096,
 #     load_in_4bit=True,       # set to False if you prefer full precision (16-bit)
 #     fast_inference=True,
@@ -222,5 +222,5 @@ def evaluate_built_model(
 #     random_state=3407,
 #     )
 
-# lora_weights = model.load_lora("/h/yuchongz/vector-trl-references/grpo_saved_lora")
-# evaluate_built_model(model, tokenizer, lora_weights, test_dataset, sampling_params)
+# lora_weights = model.load_lora("/h/yuchongz/deepseek-s1/checkpoints/n=8-b=8-g=1-max=4096")
+# evaluate_built_model(model, tokenizer, None, test_dataset, sampling_params)

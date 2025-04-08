@@ -18,7 +18,7 @@ from vllm import SamplingParams
 from grpo.data import get_dataset
 from grpo.budget_forcing import WaitLogitsProcessor
 from grpo.reward import get_reward_funcs, get_format_reward_funcs
-from grpo.eval import evaluate_built_model, evaluate_checkpoint
+from grpo.eval_batched import evaluate_built_model
 from pathlib import Path
 
 PatchFastRL("GRPO", FastLanguageModel)
@@ -129,7 +129,7 @@ def run(args):
     test_dataset = get_dataset(task=args.task, split="test")
     eval_sampling_params = SamplingParams(temperature=0.8, top_p=0.95, max_tokens=1024)
     
-    evaluate_built_model(model, tokenizer, loaded_lora, test_dataset, eval_sampling_params)
+    evaluate_built_model(model, tokenizer, loaded_lora, test_dataset, eval_sampling_params, batch_size=128)
         
 
 if __name__ == "__main__":
