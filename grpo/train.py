@@ -81,6 +81,7 @@ def run(args):
     run_name = f"{model_name}-{args.task}-n={args.num_generations}-b={args.per_device_train_batch_size}-g={args.gradient_accumulation_steps}-max={args.max_completion_length}-bf={args.min_budget}"
     if args.format_reward:
         run_name += "-format"
+    run_name += "-final"
     
     training_args = GRPOConfig(
         use_vllm=True,  # use vLLM for fast inference!
@@ -104,7 +105,7 @@ def run(args):
         save_steps=args.num_steps,
         max_grad_norm=0.1,
         report_to="wandb",  # Can use Weights & Biases
-        output_dir=f"outputs/{run_name}",
+        output_dir=f"{args.save_path}/outputs/{run_name}",
         run_name=run_name,
         vllm_sampling_params=vllm_sampling_params,
     )
@@ -122,12 +123,12 @@ def run(args):
         )
     trainer.train()
     
-    checkpoint_save_path = Path(f"checkpoints/{run_name}")
+    checkpoint_save_path = Path(f"{args.save_path}/checkpoints/{run_name}")
     checkpoint_save_path.mkdir(parents=True, exist_ok=True)
     model.save_lora(checkpoint_save_path)
-    loaded_lora = model.load_lora(checkpoint_save_path)
+    loaded_lora = model.load_lora(f'outputs/{run_name}/checkpoint-{args.num_steps}')
     test_dataset = get_dataset(task=args.task, split="test")
-    eval_sampling_params = SamplingParams(temperature=0.8, top_p=0.95, max_tokens=1024)
+    eval_sampling_params = SamplingParams(temperature=0.9, top_p=0.95, max_tokens=args.max_completion_length)
     
     evaluate_built_model(model, tokenizer, loaded_lora, test_dataset, eval_sampling_params, batch_size=128)
         
@@ -147,6 +148,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_steps", type=int, default=250)
     parser.add_argument("--format_reward", action="store_true")
     parser.add_argument("--min_budget", type=int, default=-1)
+    parser.add_argument("--save_path", type=str, default="./")
     args = parser.parse_args()
     
     run(args)

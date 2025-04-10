@@ -17,16 +17,9 @@ from grpo.data import extract_xml_answer
 
 def get_reward_funcs(task) -> list[callable]:
     if task == "gsm8k":
-        return [
-            correctness_reward_func,
-            int_reward_func,
-        ]
+        return [correctness_reward_func]
     elif task == "countdown":
-        return [
-            countdown_extraction_reward_func,
-            countdown_valid_reward_func,
-            countdown_correctness_reward_func,
-        ]
+        return [countdown_correctness_reward_func]
     else:
         raise ValueError(f"Unknown task: {task}. Supported tasks are 'gsm8k' and 'countdown'.")
 

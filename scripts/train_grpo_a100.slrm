@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH -p a40
-#SBATCH --qos m
+#SBATCH -p a100
+#SBATCH --qos a100_cmaddis
 #SBATCH --gres gpu:1
 #SBATCH -c 8
-#SBATCH --mem 32GB
-#SBATCH --time 5:00:00
+#SBATCH --mem 128GB
+#SBATCH --time 24:00:00
 #SBATCH --job-name vllm-trl
 #SBATCH --output=logs/grpo_%A.out
 #SBATCH --error=logs/grpo_%A.err
@@ -28,13 +28,13 @@ singularity exec \
 --bind /opt/slurm/:/opt/slurm/ \
 ${SIF_PATH} \
 uv run grpo/train.py \
-    --model_name /model-weights/Qwen2.5-3B-Instruct \
+    --model_name /model-weights/Qwen2.5-14B-Instruct \
+    --task countdown \
     --lora_rank 64 \
     --num_examples -1 \
-    --per_device_train_batch_size 8 \
-    --gradient_accumulation_steps 1 \
+    --per_device_train_batch_size 16 \
+    --gradient_accumulation_steps 4 \
     --max_completion_length 4096 \
     --num_generations 8 \
-    --num_steps 250 \
+    --num_steps 300 \
     --min_budget -1 \
-    # --format_reward \
