@@ -107,14 +107,15 @@ def get_countdown_questions(split="train", num_examples=-1) -> Dataset:
     raw_dataset = load_dataset('Jiayi-Pan/Countdown-Tasks-3to4', split='train')
     
     if split == "train":
-        if num_examples > 0:
-            dataset = raw_dataset.select(range(min(num_examples, train_size)))
-        else:
-            dataset = raw_dataset.select(range(train_size))
+        idx1 = 0
+        idx2 = min(num_examples, train_size) if num_examples > 0 else train_size
     elif split == "test":
-        dataset = raw_dataset.select(range(train_size, train_size + test_size))
-        
+        idx1 = train_size
+        idx2 = train_size + min(num_examples, test_size) if num_examples > 0 else test_size
+    
+    dataset = raw_dataset.select(range(idx1, idx2))    
     dataset = dataset.map(function=process_fn)
+    
     return dataset
         
     

@@ -18,7 +18,7 @@ from vllm import SamplingParams
 from grpo.data import get_dataset
 from grpo.budget_forcing import WaitLogitsProcessor
 from grpo.reward import get_reward_funcs, get_format_reward_funcs
-from grpo.eval_batched import evaluate_built_model
+from grpo.eval import evaluate_built_model
 from pathlib import Path
 
 PatchFastRL("GRPO", FastLanguageModel)
@@ -32,7 +32,9 @@ def vLLMSamplingParams(**kwargs):
 
 
 def run(args):
-    print("Arguments:\n", vars(args))
+    print("Arguments:")
+    for k, v in vars(args).items():
+        print(f"{k}: {v}")
     
     # Load up `Qwen 2.5 3B Instruct`, and set parameters
     model, tokenizer = FastLanguageModel.from_pretrained(
@@ -105,7 +107,7 @@ def run(args):
         save_steps=args.num_steps,
         max_grad_norm=0.1,
         report_to="wandb",  # Can use Weights & Biases
-        output_dir=f"{args.save_path}/outputs/{run_name}",
+        output_dir=f"./outputs/{run_name}",
         run_name=run_name,
         vllm_sampling_params=vllm_sampling_params,
     )

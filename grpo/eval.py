@@ -1,226 +1,187 @@
-from unsloth import FastLanguageModel, PatchFastRL
-from grpo.data import get_gsm8k_questions, extract_xml_answer
-from vllm import SamplingParams
+import sys
 
+sys.path = [
+    "",
+    ".venv/lib/python3.12/site-packages",
+    "/usr/lib/python312.zip",
+    "/usr/lib/python3.12",
+    "/usr/lib/python3.12/lib-dynload",
+    "/usr/local/lib/python3.12/dist-packages",
+    "/usr/lib/python3/dist-packages",
+]
 
-PatchFastRL("GRPO", FastLanguageModel)
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from peft import PeftModel  # Make sure you have the 'peft' package installed
+from grpo.data import get_dataset, extract_xml_answer
+from pathlib import Path
 
-
-def evaluate_checkpoint(
+def eval_checkpoint(
     checkpoint_path: str,
-    test_dataset,
-    base_model_name: str = "/model-weights/Qwen2.5-3B-Instruct",
-    max_seq_length: int = 4096,
-    lora_rank: int = 64,
-    sampling_params: SamplingParams = None,
+    task: str,
+    base_model_name: str,
+    batch_size: int = 32,
+    num_examples: int = -1,
 ):
-    """
-    Loads a base model and applies a LoRA checkpoint from the provided path,
-    then evaluates the model on the gsm8k test dataset.
+    # Sampling params for generation
+    sampling_kwargs = {
+            "do_sample": True,
+            "top_p": 1.0,
+            "temperature": 0.9,
+        }
     
-    Args:
-        checkpoint_path (str): Path to the saved LoRA checkpoint.
-        num_examples (int, optional): Number of test examples to evaluate. If None, uses all.
-        base_model_name (str): Path or name of the base model.
-        max_seq_length (int): Maximum sequence length for the model.
-        lora_rank (int): Rank for the LoRA modules.
-        sampling_params (SamplingParams): parameters for sampling.
-    
-    Returns:
-        A tuple (avg_score, accuracy) where:
-          - avg_score: The average score based on a simple correctness check.
-          - accuracy: The percentage of examples for which the generated answer exactly matches the expected answer.
-    """
-    # Load the base model and tokenizer
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=base_model_name,
-        max_seq_length=max_seq_length,
-        load_in_4bit=True,       # set to False if you prefer full precision (16-bit)
-        fast_inference=True,
-        max_lora_rank=lora_rank,
-        gpu_memory_utilization=0.5,
+    # Load the tokenizer and base model
+    tokenizer = AutoTokenizer.from_pretrained(base_model_name, trust_remote_code=True, padding_side="left")
+    model = AutoModelForCausalLM.from_pretrained(
+        base_model_name,
+        trust_remote_code=True,
+        torch_dtype=torch.float16,
+        local_files_only=True,
     )
     
-    model = FastLanguageModel.get_peft_model(
-    model,
-    r=lora_rank,  # Choose any number > 0 ! Suggested 8, 16, 32, 64, 128
-    target_modules=[
-        "q_proj",
-        "k_proj",
-        "v_proj",
-        "o_proj",
-        "gate_proj",
-        "up_proj",
-        "down_proj",
-    ],  # Remove QKVO if out of memory
-    lora_alpha=lora_rank,
-    use_gradient_checkpointing="unsloth",  # Enable long context finetuning
-    random_state=3407,
-    )
+    # Load the LoRA adapter weights via the PEFT library
+    model = PeftModel.from_pretrained(model, checkpoint_path, torch_dtype=torch.float16)
     
-    # Load the LoRA checkpoint from the given path
-    lora_weights = model.load_lora(checkpoint_path)
+    # Move model to GPU 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.to(device)
+    model.eval()
+    
+    # get dataset
+    test_dataset = get_dataset(task=task, split="test", num_examples=num_examples)
     
     total_score = 0.0
     num_correct = 0
+    total_examples = len(test_dataset["answer"])
     
-    # Loop through each test example
-    for idx, example in enumerate(test_dataset):
-        # Prepare the prompt (assumes prompt is a list of messages)
-        input_text = tokenizer.apply_chat_template(
-            example["prompt"],
-            tokenize=False,
-            add_generation_prompt=True,
-        )
-        
-        # Generate output using fast_generate; note that we pass the lora weights
-        output = (
-            model.fast_generate(
-                input_text,
-                sampling_params=sampling_params,
-                lora_request=lora_weights,
-            )[0]
-            .outputs[0]
-            .text
-        )
-        
-        # Extract the answer using the helper function (assumes <think> and <answer> XML format)
-        generated_answer = extract_xml_answer(output)
-        expected_answer = example["answer"]
-        
-        # Evaluate the output: using a simple exact match (like your correctness_reward_func logic)
-        is_correct = (generated_answer.strip() == expected_answer.strip())
-        score = 2.0 if is_correct else 0.0
-        
-        total_score += score
-        if is_correct:
-            num_correct += 1
-        
-        # Print per-example details
-        if idx < 50:
-            print(f"Example {idx + 1}:")
-            print(f"Question: {example['prompt'][-1]['content']}")
-            print(f"Expected Answer: {expected_answer}")
-            print(f"Generated Answer: {generated_answer}")
-            print(f"Score: {score}")
-            print("-" * 50)
+    # Logging
+    run_name = checkpoint_path.split("/")[-2]
+    # print(f"Evaluation Results - {run_name}\n")
+    # print("=" * 50 + "\n\n")
     
-    # Compute average score and accuracy
-    avg_score = total_score / len(test_dataset) if test_dataset else 0.0
-    accuracy = num_correct / len(test_dataset) if test_dataset else 0.0
-    print(f"Average Score: {avg_score}")
-    print(f"Accuracy: {accuracy * 100:.2f}%")
+    eval_save_path = Path(f"./eval_results/{run_name}")
+    eval_save_path.mkdir(parents=True, exist_ok=True)
+    output_filename = f"./eval_results/{run_name}/evaluation_results.txt"
+    
+    with open(output_filename, "w") as logfile:
+        logfile.write("Evaluation Results\n")
+        logfile.write("=" * 50 + "\n\n")
+    
+    # Loop over the test dataset in batches
+    for i in range(0, total_examples, batch_size):
+        # Extract the current batch for each key
+        batch_prompts = test_dataset["prompt"][i:i+batch_size]
+        batch_answers = test_dataset["answer"][i:i+batch_size]
+        batch_questions = test_dataset["question"][i:i+batch_size]
+        
+        # Convert each prompt (list of messages) to a single input text string.
+        # This example simply concatenates messages with a newline separator.
+        input_texts = []
+        for messages in batch_prompts:
+            # You could enhance this further to include more context if needed.
+            text = "\n".join([f"{msg['role'].capitalize()}: {msg['content']}" for msg in messages])
+            input_texts.append(text)
+        
+        # Tokenize the inputs
+        inputs = tokenizer(
+            input_texts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=1024
+        )
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        
+        # Generate outputs using the model
+        with torch.no_grad():
+            outputs = model.generate(
+                inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                max_length=4096,
+                **sampling_kwargs
+            )
+        print("DONE")    
+            
+        # Decode the generated texts
+        generated_texts = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        
+        # Evaluate each example in the batch
+        for j, (gen_text, expected_answer, question_text) in enumerate(zip(generated_texts, batch_answers, batch_questions)):
+            # For simplicity, assume the generated answer is the text after the last newline.
+            # You might need to adapt this extraction depending on your expected format.
+            generated_answer = gen_text
+            
+            generated_answer = extract_xml_answer(generated_answer)
+            is_correct = generated_answer == expected_answer
+            
+            if is_correct:
+                if task == "math":
+                    score = 1.0
+                elif task == "gsm8k":
+                    score = 2.0
+            else:
+                score = 0.0
+            total_score += score
+            if is_correct:
+                num_correct += 1
+            
+            overall_idx = i + j
+                        
+            # Logging
+            if overall_idx < 30:
+                print(f"Example {overall_idx + 1}:\n")
+                print(f"Question: {question_text}\n")
+                print("Prompt:\n")
+                print(input_texts[j] + "\n")
+                print(f"Expected Answer: {expected_answer}\n")
+                print(f"Full Generated Response: {gen_text}\n")
+                print(f"Extracted Answer: {generated_answer}\n")
+                print(f"Score: {score}\n")
+                print("-" * 50 + "\n")            
+
+            # Save each example's details to the output file
+            with open(output_filename, "a") as logfile:
+                logfile.write(f"Example {overall_idx + 1}:\n")
+                logfile.write(f"Question: {question_text}\n")
+                logfile.write("Prompt:\n")
+                logfile.write(input_texts[j] + "\n")
+                logfile.write(f"Expected Answer: {expected_answer}\n")
+                logfile.write(f"Full Generated Response: {gen_text}\n")
+                logfile.write(f"Extracted Answer: {generated_answer}\n")
+                logfile.write(f"Score: {score}\n")
+                logfile.write("-" * 50 + "\n")
+    
+    avg_score = total_score / total_examples if total_examples > 0 else 0.0
+    accuracy = num_correct / total_examples if total_examples > 0 else 0.0
+    
+    # Logging
+    print("\n" + "=" * 50 + "\n")
+    print(f"Average Score: {avg_score}\n")
+    print(f"Accuracy: {accuracy * 100:.2f}%\n")
+    
+    # Write summary metrics to the output file
+    with open(output_filename, "a") as logfile:
+        logfile.write("\n" + "=" * 50 + "\n")
+        logfile.write(f"Average Score: {avg_score}\n")
+        logfile.write(f"Accuracy: {accuracy * 100:.2f}%\n")
     
     return avg_score, accuracy
 
+if __name__ == "__main__":
+    import argparse
 
-def evaluate_built_model(
-        model,
-        tokenizer,
-        loaded_lora,
-        test_dataset,
-        sampling_params: SamplingParams = None,
-        
-    ):
-    """
-    This function is the same as evaluate_checkpoint except it takes in an already
-    built model and tokenizer.
+    parser = argparse.ArgumentParser(description="Run eval.")
+    parser.add_argument("--checkpoint_path", type=str, default="/scratch/ssd004/scratch/jonah/large-models/outputs/Qwen2.5-3B-Instruct-gsm8k-n=16-b=16-g=4-max=4096-bf=256-final/checkpoint-300")
+    parser.add_argument("--base_model_name", type=str, default="/model-weights/Qwen2.5-1.5B-Instruct")
+    parser.add_argument("--task", type=str, default="gsm8k")
+    parser.add_argument("--batch_size", type=int, default=128)
+    parser.add_argument("--num_examples", type=int, default=512)
+    args = parser.parse_args()
     
-    - model and tokenizer should be obtained by:
-        "model, tokenizer = FastLanguageModel.from_pretrained(....)"
-        "model = FastLanguageModel.get_peft_model(model, ...)"
-    
-    - loaded_lora should be obtained by something like 
-        "model.load_lora(path/to/checkpoint)"
-    
-    """
-    total_score = 0.0
-    num_correct = 0
-    
-    # Loop through each test example
-    for idx, example in enumerate(test_dataset):
-        # Prepare the prompt (assumes prompt is a list of messages)
-        input_text = tokenizer.apply_chat_template(
-            example["prompt"],
-            tokenize=False,
-            add_generation_prompt=True,
-        )
-        
-        # Generate output using fast_generate; note that we pass the lora weights
-        output = (
-            model.fast_generate(
-                input_text,
-                sampling_params=sampling_params,
-                lora_request=loaded_lora,
-            )[0]
-            .outputs[0]
-            .text
-        )
-        
-        # Extract the answer using the helper function (assumes <think> and <answer> XML format)
-        generated_answer = extract_xml_answer(output)
-        expected_answer = example["answer"]
-        
-        # Evaluate the output: using a simple exact match (like your correctness_reward_func logic)
-        is_correct = (generated_answer.strip() == expected_answer.strip())
-        score = 2.0 if is_correct else 0.0
-        
-        total_score += score
-        if is_correct:
-            num_correct += 1
-        
-        # Print per-example details
-        if idx < 50:
-            print(f"Example {idx + 1}:")
-            print(f"Question: {example['prompt'][-1]['content']}")
-            print(f"Expected Answer: {expected_answer}")
-            print(f"Generated Answer: {generated_answer}")
-            print(f"Score: {score}")
-            print("-" * 50)
-    
-    # Compute average score and accuracy
-    avg_score = total_score / len(test_dataset) if test_dataset else 0.0
-    accuracy = num_correct / len(test_dataset) if test_dataset else 0.0
-    print(f"Average Score: {avg_score}")
-    print(f"Accuracy: {accuracy * 100:.2f}%")
-    
-    return avg_score, accuracy
-
-
-# Example usage:
-
-
-# For evaluate_checkpoint:
-# test_dataset = get_gsm8k_questions(split="test", num_examples=1024)
-# sampling_params = SamplingParams(temperature=0.8, top_p=0.95, max_tokens=1024)
-# avg_score, acc = evaluate_checkpoint("/h/yuchongz/deepseek-s1/checkpoints/n=8-b=8-g=1-max=4096", test_dataset=test_dataset, sampling_params=sampling_params)
-
-
-# For evaluate_built_model
-# model, tokenizer = FastLanguageModel.from_pretrained(
-#     model_name="/h/yuchongz/deepseek-s1/checkpoints/n=8-b=8-g=1-max=4096",
-#     max_seq_length=4096,
-#     load_in_4bit=True,       # set to False if you prefer full precision (16-bit)
-#     fast_inference=True,
-#     max_lora_rank=64,
-#     gpu_memory_utilization=0.5,
-# )
-# model = FastLanguageModel.get_peft_model(
-#     model,
-#     r=64,  # Choose any number > 0 ! Suggested 8, 16, 32, 64, 128
-#     target_modules=[
-#         "q_proj",
-#         "k_proj",
-#         "v_proj",
-#         "o_proj",
-#         "gate_proj",
-#         "up_proj",
-#         "down_proj",
-#     ],  # Remove QKVO if out of memory
-#     lora_alpha=64,
-#     use_gradient_checkpointing="unsloth",  # Enable long context finetuning
-#     random_state=3407,
-#     )
-
-# lora_weights = model.load_lora("/h/yuchongz/deepseek-s1/checkpoints/n=8-b=8-g=1-max=4096")
-# evaluate_built_model(model, tokenizer, None, test_dataset, sampling_params)
+    eval_checkpoint(
+        checkpoint_path=args.checkpoint_path,
+        task=args.task,
+        base_model_name=args.base_model_name,
+        batch_size=args.batch_size,
+        num_examples=args.num_examples,
+    )
